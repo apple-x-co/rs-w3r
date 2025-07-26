@@ -1,10 +1,8 @@
 [package]
 name = "rs-w3r"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-clap = "4.5.41"
-jsonschema = "0.30.0"
-serde_json = "1.0.141"
-ureq = "3.0.12"
+clap = { version = "4.5", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
