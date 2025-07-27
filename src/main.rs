@@ -7,8 +7,26 @@ use std::error::Error;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[arg(long, env = "BASIC_USER")]
+    basic_user: Option<String>,
+
+    #[arg(long, env = "BASIC_PASS")]
+    basic_pass: Option<String>,
+
     #[arg(short, long, default_value = "GET")]
     method: String,
+
+    #[arg(long, env = "PROXY_HOST")]
+    proxy_host: Option<String>,
+
+    #[arg(long, env = "PROXY_PORT")]
+    proxy_port: Option<String>,
+
+    #[arg(long, env = "PROXY_USER")]
+    proxy_user: Option<String>,
+
+    #[arg(long, env = "PROXY_PASS")]
+    proxy_pass: Option<String>,
 
     #[arg(short, long, default_value = "30")]
     timeout: u64,
@@ -21,41 +39,50 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let proxy_host = std::env::var("PROXY_HOST").unwrap_or("".to_string());
-    let proxy_port = std::env::var("PROXY_PORT").unwrap_or("".to_string());
-    let proxy_user = std::env::var("PROXY_USER").unwrap_or("".to_string());
-    let proxy_password = std::env::var("PROXY_PASSWORD").unwrap_or("".to_string());
-
-    let basic_user = std::env::var("BASIC_USER").unwrap_or("".to_string());
-    let basic_password = std::env::var("BASIC_PASSWORD").unwrap_or("".to_string());
-
     let args = Args::parse();
 
     let config = Config {
-        basic_auth: if basic_user != "" && basic_password != "" {
-            Some(BasicAuthConfig {
-                user: basic_user,
-                pass: basic_password,
-            })
+        basic_auth: if let Some(basic_user) = args.basic_user {
+            if let Some(basic_pass) = args.basic_pass {
+                Some(BasicAuthConfig {
+                    user: basic_user,
+                    pass: basic_pass,
+                })
+            } else {
+                None
+            }
         } else {
             None
         },
         method: args.method,
-        proxy: if proxy_host != "" && proxy_port != "" {
-            if proxy_user != "" && proxy_password != "" {
-                Some(ProxyConfig {
-                    host: proxy_host,
-                    port: proxy_port,
-                    user: Some(proxy_user),
-                    pass: Some(proxy_password),
-                })
+        proxy: if let Some(proxy_host) = args.proxy_host {
+            if let Some(proxy_port) = args.proxy_port {
+                if let Some(proxy_user) = args.proxy_user {
+                    if let Some(proxy_pass) = args.proxy_pass {
+                        Some(ProxyConfig {
+                            host: proxy_host,
+                            port: proxy_port,
+                            user: Some(proxy_user),
+                            pass: Some(proxy_pass),
+                        })
+                    } else {
+                        Some(ProxyConfig {
+                            host: proxy_host,
+                            port: proxy_port,
+                            user: None,
+                            pass: None,
+                        })
+                    }
+                } else {
+                    Some(ProxyConfig {
+                        host: proxy_host,
+                        port: proxy_port,
+                        user: None,
+                        pass: None,
+                    })
+                }
             } else {
-                Some(ProxyConfig {
-                    host: proxy_host,
-                    port: proxy_port,
-                    user: None,
-                    pass: None,
-                })
+                None
             }
         } else {
             None
