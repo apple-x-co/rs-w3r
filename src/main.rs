@@ -39,10 +39,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .timeout(Duration::from_secs(timeout))
         .user_agent("rs-w3r/1.0");
 
-    if proxy_host != "" && proxy_port != "" && proxy_user != "" && proxy_password != "" {
+    if proxy_host != "" && proxy_port != "" {
         let proxy_url = format!("https://{}:{}", proxy_host, proxy_port);
         let mut proxy = reqwest::Proxy::http(proxy_url)?;
-        proxy = proxy.basic_auth(proxy_user.as_str(), proxy_password.as_str());
+
+        if proxy_user != "" && proxy_password != "" {
+            proxy = proxy.basic_auth(proxy_user.as_str(), proxy_password.as_str());
+        }
+
         client_builder = client_builder.proxy(proxy);
     }
 
