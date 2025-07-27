@@ -1,8 +1,8 @@
+use reqwest::blocking::Client;
+use reqwest::header::CONTENT_TYPE;
+use reqwest::Method;
 use std::error::Error;
 use std::time::Duration;
-use reqwest::blocking::Client;
-use reqwest::header::{ACCEPT, CONTENT_TYPE};
-use reqwest::Method;
 
 pub struct BasicAuthConfig {
     pub user: String,
@@ -18,6 +18,7 @@ pub struct ProxyConfig {
 
 pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
+    pub form_data: Option<String>,
     pub json: Option<String>,
     pub method: String,
     pub proxy: Option<ProxyConfig>,
@@ -26,8 +27,7 @@ pub struct Config {
     pub verbose: bool,
 }
 
-pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>>
-{
+pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // カスタムクライアントの作成
     let mut client_builder = Client::builder()
         .timeout(Duration::from_secs(config.timeout))
@@ -64,9 +64,14 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>>
         request_builder = request_builder.basic_auth(basic_auth.user, Some(basic_auth.pass));
     }
 
+    if let Some(form_data) = config.form_data {
+        request_builder = request_builder
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(form_data);
+    }
+
     if let Some(json) = config.json {
         request_builder = request_builder
-            .header(ACCEPT, "application/json")
             .header(CONTENT_TYPE, "application/json; charset=utf-8")
             .json(&json);
     }
@@ -76,13 +81,13 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>>
     // レスポンス情報の表示
     if config.verbose {
         println!(
-            "Status: {} {}",
+            "{:?} {} {}",
+            response.version(),
             response.status().as_u16(),
             response.status().canonical_reason().unwrap_or("")
         );
-        println!("Headers:");
         for (name, value) in response.headers() {
-            println!("  {}: {}", name, value.to_str().unwrap_or("<binary>"));
+            println!("{}: {}", name, value.to_str().unwrap_or("<binary>"));
         }
         println!();
     }

@@ -14,6 +14,9 @@ struct Args {
     basic_pass: Option<String>,
 
     #[arg(short, long)]
+    form_data: Option<String>,
+
+    #[arg(short, long)]
     json: Option<String>,
 
     #[arg(short, long, default_value = "GET")]
@@ -57,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             None
         },
+        form_data: args.form_data,
         json: args.json,
         method: args.method,
         proxy: if let Some(proxy_host) = args.proxy_host {
