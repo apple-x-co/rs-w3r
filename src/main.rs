@@ -13,6 +13,9 @@ struct Args {
     #[arg(long, env = "BASIC_PASS")]
     basic_pass: Option<String>,
 
+    #[arg(short, long)]
+    json: Option<String>,
+
     #[arg(short, long, default_value = "GET")]
     method: String,
 
@@ -54,6 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             None
         },
+        json: args.json,
         method: args.method,
         proxy: if let Some(proxy_host) = args.proxy_host {
             if let Some(proxy_port) = args.proxy_port {

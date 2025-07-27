@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 use reqwest::blocking::Client;
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::Method;
 
 pub struct BasicAuthConfig {
@@ -17,6 +18,7 @@ pub struct ProxyConfig {
 
 pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
+    pub json: Option<String>,
     pub method: String,
     pub proxy: Option<ProxyConfig>,
     pub timeout: u64,
@@ -60,6 +62,13 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>>
 
     if let Some(basic_auth) = config.basic_auth {
         request_builder = request_builder.basic_auth(basic_auth.user, Some(basic_auth.pass));
+    }
+
+    if let Some(json) = config.json {
+        request_builder = request_builder
+            .header(ACCEPT, "application/json")
+            .header(CONTENT_TYPE, "application/json; charset=utf-8")
+            .json(&json);
     }
 
     let response = request_builder.send()?;
