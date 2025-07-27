@@ -22,6 +22,9 @@ struct Args {
     #[arg(short, long, default_value = "GET")]
     method: String,
 
+    #[arg(short, long)]
+    output: Option<String>,
+
     #[arg(long, env = "PROXY_HOST")]
     proxy_host: Option<String>,
 
@@ -33,6 +36,9 @@ struct Args {
 
     #[arg(long, env = "PROXY_PASS")]
     proxy_pass: Option<String>,
+
+    #[arg(short, long, default_value_t = false)]
+    silent: bool,
 
     #[arg(short, long, default_value = "30")]
     timeout: u64,
@@ -63,6 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         form_data: args.form_data,
         json: args.json,
         method: args.method,
+        output: args.output,
         proxy: if let Some(proxy_host) = args.proxy_host {
             if let Some(proxy_port) = args.proxy_port {
                 if let Some(proxy_user) = args.proxy_user {
@@ -95,6 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             None
         },
+        silent: args.silent,
         timeout: args.timeout,
         url: args.url,
         verbose: args.verbose,

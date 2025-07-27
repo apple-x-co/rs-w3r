@@ -2,6 +2,8 @@ use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
 use reqwest::Method;
 use std::error::Error;
+use std::fs::File;
+use std::io::Write;
 use std::time::Duration;
 
 pub struct BasicAuthConfig {
@@ -21,7 +23,9 @@ pub struct Config {
     pub form_data: Option<String>,
     pub json: Option<String>,
     pub method: String,
+    pub output: Option<String>,
     pub proxy: Option<ProxyConfig>,
+    pub silent: bool,
     pub timeout: u64,
     pub url: String,
     pub verbose: bool,
@@ -94,9 +98,20 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
 
     // ボディの表示
     let body = response.text()?;
-    if config.verbose {
-        println!("{}", body);
+    if let Some(output) = config.output {
+        write_file_bytes(output.as_str(), body.as_ref())?;
+    } else {
+        if !config.silent {
+            println!("{}", body);
+        }
     }
+
+    Ok(())
+}
+
+fn write_file_bytes(file_path: &str, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    let mut file = File::create(file_path)?;
+    file.write_all(data)?;
 
     Ok(())
 }
