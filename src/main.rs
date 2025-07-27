@@ -1,8 +1,8 @@
+mod client;
+
+use crate::client::{execute_request, BasicAuthConfig, Config, ProxyConfig};
 use clap::{arg, Parser};
-use reqwest::blocking::Client;
-use reqwest::Method;
 use std::error::Error;
-use std::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -31,64 +31,41 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args = Args::parse();
 
-    let url = args.url;
-    let timeout = args.timeout;
-
-    // カスタムクライアントの作成
-    let mut client_builder = Client::builder()
-        .timeout(Duration::from_secs(timeout))
-        .user_agent("rs-w3r/1.0");
-
-    if proxy_host != "" && proxy_port != "" {
-        let proxy_url = format!("https://{}:{}", proxy_host, proxy_port);
-        let mut proxy = reqwest::Proxy::http(proxy_url)?;
-
-        if proxy_user != "" && proxy_password != "" {
-            proxy = proxy.basic_auth(proxy_user.as_str(), proxy_password.as_str());
-        }
-
-        client_builder = client_builder.proxy(proxy);
-    }
-
-    let client = client_builder.build()?;
-
-    // リクエスト実行
-    let method = Method::from_bytes(args.method.as_bytes())?;
-    let mut request_builder = match method {
-        Method::GET => client.get(url),
-        Method::POST => client.post(url),
-        Method::PUT => client.put(url),
-        Method::DELETE => client.delete(url),
-        Method::HEAD => client.head(url),
-        Method::PATCH => client.patch(url),
-        _ => panic!("unknown method"),
+    let config = Config {
+        basic_auth: if basic_user != "" && basic_password != "" {
+            Some(BasicAuthConfig {
+                user: basic_user,
+                pass: basic_password,
+            })
+        } else {
+            None
+        },
+        method: args.method,
+        proxy: if proxy_host != "" && proxy_port != "" {
+            if proxy_user != "" && proxy_password != "" {
+                Some(ProxyConfig {
+                    host: proxy_host,
+                    port: proxy_port,
+                    user: Some(proxy_user),
+                    pass: Some(proxy_password),
+                })
+            } else {
+                Some(ProxyConfig {
+                    host: proxy_host,
+                    port: proxy_port,
+                    user: None,
+                    pass: None,
+                })
+            }
+        } else {
+            None
+        },
+        timeout: args.timeout,
+        url: args.url,
+        verbose: args.verbose,
     };
 
-    if basic_user != "" && basic_password != "" {
-        request_builder = request_builder.basic_auth(basic_user, Some(basic_password));
-    }
-
-    let response = request_builder.send()?;
-
-    // レスポンス情報の表示
-    if args.verbose {
-        println!(
-            "Status: {} {}",
-            response.status().as_u16(),
-            response.status().canonical_reason().unwrap_or("")
-        );
-        println!("Headers:");
-        for (name, value) in response.headers() {
-            println!("  {}: {}", name, value.to_str().unwrap_or("<binary>"));
-        }
-        println!();
-    }
-
-    // ボディの表示
-    let body = response.text()?;
-    if args.verbose {
-        println!("{}", body);
-    }
+    execute_request(config)?;
 
     Ok(())
 }
