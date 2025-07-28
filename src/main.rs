@@ -13,8 +13,14 @@ struct Args {
     #[arg(long, env = "BASIC_PASS")]
     basic_pass: Option<String>,
 
+    #[arg(long, action = clap::ArgAction::Append)]
+    cookies: Option<Vec<String>>,
+
     #[arg(short, long)]
     form_data: Option<String>,
+
+    #[arg(long, action = clap::ArgAction::Append)]
+    headers: Option<Vec<String>>,
 
     #[arg(short, long)]
     json: Option<String>,
@@ -66,7 +72,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             None
         },
+        cookies: args.cookies,
         form_data: args.form_data,
+        headers: args.headers,
         json: args.json,
         method: args.method,
         output: args.output,

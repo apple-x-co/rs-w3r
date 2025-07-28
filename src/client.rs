@@ -1,9 +1,11 @@
 use reqwest::blocking::Client;
-use reqwest::header::CONTENT_TYPE;
-use reqwest::Method;
+use reqwest::cookie::Jar;
+use reqwest::header::{HeaderName, CONTENT_TYPE};
+use reqwest::{Method, Url};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub struct BasicAuthConfig {
@@ -20,7 +22,9 @@ pub struct ProxyConfig {
 
 pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
+    pub cookies: Option<Vec<String>>,
     pub form_data: Option<String>,
+    pub headers: Option<Vec<String>>,
     pub json: Option<String>,
     pub method: String,
     pub output: Option<String>,
@@ -48,6 +52,36 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         }
 
         client_builder = client_builder.proxy(http_proxy);
+    }
+
+    if let Some(cookies) = config.cookies {
+        let cookie_jar = Jar::default();
+        let url = &Url::parse(config.url.as_str()).unwrap();
+
+        for cookie in cookies {
+            cookie_jar.add_cookie_str(cookie.as_str(), url);
+        }
+
+        client_builder = client_builder.cookie_provider(Arc::new(cookie_jar));
+    }
+
+    if let Some(headers) = config.headers {
+        if !headers.is_empty() {
+            let mut header_map = reqwest::header::HeaderMap::new();
+
+            for header in headers {
+                if let Some((key, value)) = header.split_once(':') {
+                    if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
+                        let value_string = value.trim().to_string();
+                        if let Ok(header_value) = value_string.parse() {
+                            header_map.insert(header_name, header_value);
+                        }
+                    }
+                }
+            }
+
+            client_builder = client_builder.default_headers(header_map);
+        }
     }
 
     let client = client_builder.build()?;
