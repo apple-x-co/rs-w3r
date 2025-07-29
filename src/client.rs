@@ -89,12 +89,12 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // リクエスト実行
     let method = Method::from_bytes(config.method.as_bytes())?;
     let mut request_builder = match method {
-        Method::GET => client.get(config.url),
-        Method::POST => client.post(config.url),
-        Method::PUT => client.put(config.url),
-        Method::DELETE => client.delete(config.url),
-        Method::HEAD => client.head(config.url),
-        Method::PATCH => client.patch(config.url),
+        Method::GET => client.get(config.url.as_str()),
+        Method::POST => client.post(config.url.as_str()),
+        Method::PUT => client.put(config.url.as_str()),
+        Method::DELETE => client.delete(config.url.as_str()),
+        Method::HEAD => client.head(config.url.as_str()),
+        Method::PATCH => client.patch(config.url.as_str()),
         _ => panic!("unknown method"),
     };
 
@@ -119,13 +119,21 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // レスポンス情報の表示
     if config.verbose {
         println!(
-            "{:?} {} {}",
+            "> {} {}",
+            method.as_ref(),
+            config.url.as_str(),
+        );
+        println!();
+        // TODO: リクエストのヘッダー情報を表示
+
+        println!(
+            "< {:?} {} {}",
             response.version(),
             response.status().as_u16(),
             response.status().canonical_reason().unwrap_or("")
         );
         for (name, value) in response.headers() {
-            println!("{}: {}", name, value.to_str().unwrap_or("<binary>"));
+            println!("< {}: {}", name, value.to_str().unwrap_or("<binary>"));
         }
         println!();
     }
