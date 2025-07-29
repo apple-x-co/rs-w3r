@@ -67,6 +67,10 @@ rs-w3r -u https://httpbin.org/headers --headers "Authorization: Bearer token123"
 rs-w3r -m POST -u https://httpbin.org/post -f "name=田中&email=tanaka@example.com"
 ```
 
+```bash
+rs-w3r -m POST -u https://httpbin.org/post --form "name=田中" --form "email=tanaka@example.com"
+```
+
 ### プロキシ経由でのリクエスト
 
 ```bash
@@ -104,7 +108,8 @@ rs-w3r -u https://www.example.com/secure-data
 #### データ送信
 
 - `-j, --json <JSON>` - JSON形式でデータを送信
-- `-f, --form-data <DATA>` - フォームデータを送信
+- `-f, --form-data <DATA>` - 手動エンコード済みのフォームデータを送信（例："name=value&key=data"）
+- `--form <KEY=VALUE>` - キー・バリューペアからフォームデータを自動生成（複数指定可能）
 
 #### 認証・セキュリティ
 
@@ -133,4 +138,4 @@ rs-w3r -u https://www.example.com/secure-data
 `curl -X POST --data-urlencode 'payload={"channel": "#channel-name", "text": "HELLO"}' WEBHOOK_URL`
 
 **rs-w3r**  
-`rs-w3r --method POST --url WEBHOOK_URL --form-data 'payload={"channel": "#test-channel", "text": "HELLO"}'`
+`rs-w3r --method POST --url WEBHOOK_URL --form 'payload={"channel": "#test-channel", "text": "HELLO"}'`

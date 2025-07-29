@@ -20,6 +20,9 @@ struct Args {
     form_data: Option<String>,
 
     #[arg(long, action = clap::ArgAction::Append)]
+    form: Option<Vec<String>>,
+
+    #[arg(long, action = clap::ArgAction::Append)]
     headers: Option<Vec<String>>,
 
     #[arg(short, long)]
@@ -74,6 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
         cookies: args.cookies,
         form_data: args.form_data,
+        form: args.form,
         headers: args.headers,
         json: args.json,
         method: args.method,

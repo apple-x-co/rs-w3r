@@ -24,6 +24,7 @@ pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
     pub cookies: Option<Vec<String>>,
     pub form_data: Option<String>,
+    pub form: Option<Vec<String>>,
     pub headers: Option<Vec<String>>,
     pub json: Option<String>,
     pub method: String,
@@ -106,6 +107,23 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(form_data);
+    }
+
+    if let Some(form) = config.form {
+        let params: Vec<_> = form
+            .into_iter()
+            .filter_map(|arg| {
+                if let Some((key, value)) = arg.split_once('=') {
+                    Some((key.to_string(), value.to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        request_builder = request_builder
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .form(&params);
     }
 
     if let Some(json) = config.json {
