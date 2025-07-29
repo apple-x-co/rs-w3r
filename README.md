@@ -124,3 +124,13 @@ rs-w3r -u https://www.example.com/secure-data
 
 - `BASIC_USER`, `BASIC_PASS` - Basic認証の資格情報
 - `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` - プロキシ設定
+
+## 🆚 比較
+
+### Slack に投稿
+
+**curl**  
+`curl -X POST --data-urlencode 'payload={"channel": "#channel-name", "text": "HELLO"}' WEBHOOK_URL`
+
+**rs-w3r**  
+`rs-w3r --method POST --url WEBHOOK_URL --form-data 'payload={"channel": "#test-channel", "text": "HELLO"}'`
