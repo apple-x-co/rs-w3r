@@ -38,46 +38,89 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 ## 📖 使用例
 
 ### 基本的なGETリクエスト
+
 ```bash
-rs-w3r -u https://api.example.com/users
+rs-w3r -u https://httpbin.org/get
 ```
 
 ### JSONデータをPOST
+
 ```bash
-rs-w3r -m POST -u https://api.example.com/users -j '{"name": "田中", "email": "tanaka@example.com"}'
+rs-w3r -m POST -u https://httpbin.org/post -j '{"name": "田中", "email": "tanaka@example.com"}'
 ```
 
 ### Basic認証付きリクエスト
+
 ```bash
-rs-w3r --basic-user myuser --basic-pass mypass -u https://api.example.com/private
+rs-w3r --basic-user myuser --basic-pass mypass -u https://httpbin.org/headers
 ```
 
 ### カスタムヘッダー付きリクエスト
+
 ```bash
-rs-w3r -u https://api.example.com/data --headers "Authorization: Bearer token123" --headers "Content-Type: application/json"
+rs-w3r -u https://httpbin.org/headers --headers "Authorization: Bearer token123" --headers "Content-Type: application/json"
 ```
 
 ### フォームデータの送信
+
 ```bash
-rs-w3r -m POST -u https://api.example.com/form -f "name=田中&email=tanaka@example.com"
+rs-w3r -m POST -u https://httpbin.org/post -f "name=田中&email=tanaka@example.com"
 ```
 
 ### プロキシ経由でのリクエスト
+
 ```bash
-rs-w3r -u https://api.example.com/data --proxy-host proxy.example.com --proxy-port 8080
+rs-w3r -u https://httpbin.org/get --proxy-host proxy.example.com --proxy-port 8080
 ```
 
 ### 詳細出力とファイル保存
+
 ```bash
-rs-w3r -v -u https://api.example.com/data -o response.json
+rs-w3r -v -u https://httpbin.org/ip -o response.json
 ```
 
 ### 環境変数を使用した設定
+
 ```bash
 export BASIC_USER=myuser
 export BASIC_PASS=mypass
 export PROXY_HOST=proxy.example.com
 export PROXY_PORT=8080
 
-rs-w3r -u https://api.example.com/secure-data
+rs-w3r -u https://www.example.com/secure-data
 ```
+
+### オプション一覧
+
+#### 基本オプション
+
+- `-u, --url <URL>` - リクエスト先のURL（必須）
+- `-m, --method <METHOD>` - HTTPメソッド（デフォルト: GET）
+- `-o, --output <FILE>` - レスポンスをファイルに保存
+- `-t, --timeout <SECONDS>` - タイムアウト時間（デフォルト: 30秒）
+- `-v, --verbose` - 詳細な出力を表示
+- `-s, --silent` - 出力を抑制
+
+#### データ送信
+
+- `-j, --json <JSON>` - JSON形式でデータを送信
+- `-f, --form-data <DATA>` - フォームデータを送信
+
+#### 認証・セキュリティ
+
+- `--basic-user <USER>` - Basic認証のユーザー名
+- `--basic-pass <PASS>` - Basic認証のパスワード
+- `--headers <HEADER>` - カスタムヘッダー（複数指定可能）
+- `--cookies <COOKIE>` - クッキーを送信（複数指定可能）
+
+#### プロキシ設定
+
+- `--proxy-host <HOST>` - プロキシサーバーのホスト
+- `--proxy-port <PORT>` - プロキシサーバーのポート
+- `--proxy-user <USER>` - プロキシ認証のユーザー名
+- `--proxy-pass <PASS>` - プロキシ認証のパスワード
+
+#### 環境変数
+
+- `BASIC_USER`, `BASIC_PASS` - Basic認証の資格情報
+- `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` - プロキシ設定
