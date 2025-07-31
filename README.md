@@ -22,6 +22,7 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 📋 **カスタムヘッダー** - 柔軟なHTTPヘッダー設定  
 🌍 **プロキシ対応** - HTTP プロキシサーバー経由でのリクエスト  
 📊 **詳細出力** - レスポンスのステータス、ヘッダー、実行時間の表示  
+⏱️ **パフォーマンス測定** - レスポンス時間、転送速度、サイズの詳細分析
 🔇 **サイレントモード** - スクリプト用の静寂実行  
 ⏱️ **タイムアウト設定** - カスタマイズ可能なリクエストタイムアウト  
 🔧 **環境変数対応** - 設定の環境変数による管理  
@@ -84,6 +85,25 @@ rs-w3r -u https://httpbin.org/get --proxy-host proxy.example.com --proxy-port 80
 rs-w3r -v -u https://httpbin.org/ip -o response.json
 ```
 
+### パフォーマンス測定
+
+```bash
+# 基本的なタイミング測定
+rs-w3r -u https://httpbin.org/get --timing
+
+# 詳細出力と組み合わせ
+rs-w3r -u https://api.github.com/users/octocat --timing -v
+```
+
+```text
+--- Timing Information ---
+Response received: 187ms
+Body read time: 12ms
+Total time: 199ms
+Response size: 1843 bytes (1.80 KB)
+Throughput: 9.05 KB/s
+```
+
 ### リクエスト内容の確認（ドライラン）
 
 ```bash
@@ -112,6 +132,7 @@ rs-w3r -u https://www.example.com/secure-data
 - `-v, --verbose` - 詳細な出力を表示
 - `-s, --silent` - 出力を抑制
 - `--dry-run` - 実際にリクエストを送信せず、リクエスト内容のみ表示
+- `--timing` - パフォーマンス測定情報を表示（レスポンス時間、転送速度など）
 
 #### データ送信
 
