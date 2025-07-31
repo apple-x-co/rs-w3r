@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct BasicAuthConfig {
     pub user: String,
@@ -33,6 +33,7 @@ pub struct Config {
     pub proxy: Option<ProxyConfig>,
     pub silent: bool,
     pub timeout: u64,
+    pub timing: bool,
     pub url: String,
     pub verbose: bool,
 }
@@ -195,8 +196,14 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    // タイミング測定開始
+    let start_time = Instant::now();
+
     // リクエストを実行しレスポンスを取得
     let response = client.execute(request)?;
+
+    // レスポンス受信完了時間を記録
+    let response_time = start_time.elapsed();
 
     // レスポンス情報の表示
     if config.verbose {
@@ -212,8 +219,38 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         println!();
     }
 
-    // レスポンスのボディの表示
+    // ボディ読み取り開始時間を記録
+    let body_start_time = Instant::now();
     let body = response.text()?;
+    let body_read_time = body_start_time.elapsed();
+
+    // 総実行時間
+    let total_time = start_time.elapsed();
+
+    // レスポンスサイズ
+    let response_size = body.len();
+
+    // タイミング情報の表示
+    if config.timing {
+        println!("--- Timing Information ---");
+        println!("Response received: {:?}", response_time);
+        println!("Body read time: {:?}", body_read_time);
+        println!("Total time: {:?}", total_time);
+        println!(
+            "Response size: {} bytes ({:.2} KB)",
+            response_size,
+            response_size as f64 / 1024.0
+        );
+
+        // スループット計算
+        if response_size > 0 && total_time.as_secs_f64() > 0.0 {
+            let throughput = response_size as f64 / total_time.as_secs_f64() / 1024.0;
+            println!("Throughput: {:.2} KB/s", throughput);
+        }
+        println!();
+    }
+
+    // ボディの表示・保存
     if let Some(output) = config.output {
         write_file_bytes(output.as_str(), body.as_ref())?;
     } else {

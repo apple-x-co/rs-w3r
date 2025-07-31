@@ -55,6 +55,9 @@ struct Args {
     #[arg(short, long, default_value = "30")]
     timeout: u64,
 
+    #[arg(long, default_value_t = false)]
+    timing: bool,
+
     #[arg(short, long)]
     url: String,
 
@@ -120,6 +123,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
         silent: args.silent,
         timeout: args.timeout,
+        timing: args.timing,
         url: args.url,
         verbose: args.verbose,
     };
