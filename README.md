@@ -25,7 +25,8 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 🔇 **サイレントモード** - スクリプト用の静寂実行  
 ⏱️ **タイムアウト設定** - カスタマイズ可能なリクエストタイムアウト  
 🔧 **環境変数対応** - 設定の環境変数による管理  
-📁 **ファイル出力** - レスポンスの直接ファイル保存
+📁 **ファイル出力** - レスポンスの直接ファイル保存  
+🧪 **ドライラン** - 実際にリクエストを送信せずにリクエスト内容を確認
 
 ## 🛠️ 技術スタック
 
@@ -83,6 +84,12 @@ rs-w3r -u https://httpbin.org/get --proxy-host proxy.example.com --proxy-port 80
 rs-w3r -v -u https://httpbin.org/ip -o response.json
 ```
 
+### リクエスト内容の確認（ドライラン）
+
+```bash
+rs-w3r --dry-run -v -m POST -u https://httpbin.org/post -j '{"test": "data"}'
+```
+
 ### 環境変数を使用した設定
 
 ```bash
@@ -104,6 +111,7 @@ rs-w3r -u https://www.example.com/secure-data
 - `-t, --timeout <SECONDS>` - タイムアウト時間（デフォルト: 30秒）
 - `-v, --verbose` - 詳細な出力を表示
 - `-s, --silent` - 出力を抑制
+- `--dry-run` - 実際にリクエストを送信せず、リクエスト内容のみ表示
 
 #### データ送信
 

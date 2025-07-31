@@ -23,6 +23,7 @@ pub struct ProxyConfig {
 pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
     pub cookies: Option<Vec<String>>,
+    pub dry_run: bool,
     pub form_data: Option<String>,
     pub form: Option<Vec<String>>,
     pub headers: Option<Vec<String>>,
@@ -36,11 +37,19 @@ pub struct Config {
     pub verbose: bool,
 }
 
+const USER_AGENT: &str = "rs-w3r/1.0";
+
 pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
+    // デフォルトヘッダーの追跡用
+    let mut default_headers = reqwest::header::HeaderMap::new();
+
     // カスタムクライアントの作成
     let mut client_builder = Client::builder()
         .timeout(Duration::from_secs(config.timeout))
-        .user_agent("rs-w3r/1.0");
+        .user_agent(USER_AGENT);
+
+    // デフォルトヘッダー追跡
+    default_headers.insert(reqwest::header::USER_AGENT, USER_AGENT.parse().unwrap());
 
     if let Some(proxy) = config.proxy {
         let proxy_url = format!("https://{}:{}", proxy.host, proxy.port);
@@ -75,7 +84,10 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
                     if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
                         let value_string = value.trim().to_string();
                         if let Ok(header_value) = value_string.parse() {
-                            header_map.insert(header_name, header_value);
+                            header_map.insert(header_name.clone(), header_value);
+
+                            // デフォルトヘッダー追跡
+                            default_headers.insert(header_name, value_string.parse().unwrap());
                         }
                     }
                 }
@@ -87,7 +99,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
 
     let client = client_builder.build()?;
 
-    // リクエスト実行
+    // リクエストの作成
     let method = Method::from_bytes(config.method.as_bytes())?;
     let mut request_builder = match method {
         Method::GET => client.get(config.url.as_str()),
@@ -101,12 +113,24 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
 
     if let Some(basic_auth) = config.basic_auth {
         request_builder = request_builder.basic_auth(basic_auth.user, Some(basic_auth.pass));
+
+        // デフォルトヘッダー追跡
+        default_headers.insert(
+            reqwest::header::AUTHORIZATION,
+            "Basic <credentials>".to_string().parse().unwrap(),
+        );
     }
 
     if let Some(form_data) = config.form_data {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(form_data);
+
+        // デフォルトヘッダー追跡
+        default_headers.insert(
+            CONTENT_TYPE,
+            "application/x-www-form-urlencoded".parse().unwrap(),
+        );
     }
 
     if let Some(form) = config.form {
@@ -124,26 +148,58 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(&params);
+
+        // デフォルトヘッダー追跡
+        default_headers.insert(
+            CONTENT_TYPE,
+            "application/x-www-form-urlencoded".parse().unwrap(),
+        );
     }
 
     if let Some(json) = config.json {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/json; charset=utf-8")
             .json(&json);
+
+        // デフォルトヘッダー追跡
+        default_headers.insert(
+            CONTENT_TYPE,
+            "application/json; charset=utf-8".parse().unwrap(),
+        );
     }
 
-    let response = request_builder.send()?;
+    // リクエストをビルドしてヘッダー情報を取得
+    let request = request_builder.build()?;
+
+    if config.verbose {
+        println!("> {} {}", method.as_ref(), config.url.as_str(),);
+
+        // デフォルトヘッダーの表示
+        for (name, value) in &default_headers {
+            println!("> {}: {}", name, value.to_str().unwrap_or("<binary>"));
+        }
+
+        // リクエストヘッダーの表示
+        if !request.headers().is_empty() {
+            for (name, value) in request.headers() {
+                if !default_headers.contains_key(name) {
+                    println!("> {}: {}", name, value.to_str().unwrap_or("<binary>"));
+                }
+            }
+        }
+
+        println!();
+    }
+
+    if config.dry_run {
+        return Ok(());
+    }
+
+    // リクエストを実行しレスポンスを取得
+    let response = client.execute(request)?;
 
     // レスポンス情報の表示
     if config.verbose {
-        println!(
-            "> {} {}",
-            method.as_ref(),
-            config.url.as_str(),
-        );
-        println!();
-        // TODO: リクエストのヘッダー情報を表示
-
         println!(
             "< {:?} {} {}",
             response.version(),
@@ -156,7 +212,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         println!();
     }
 
-    // ボディの表示
+    // レスポンスのボディの表示
     let body = response.text()?;
     if let Some(output) = config.output {
         write_file_bytes(output.as_str(), body.as_ref())?;

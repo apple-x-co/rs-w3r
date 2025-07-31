@@ -16,6 +16,9 @@ struct Args {
     #[arg(long, action = clap::ArgAction::Append)]
     cookies: Option<Vec<String>>,
 
+    #[arg(long, default_value_t = false)]
+    dry_run: bool,
+
     #[arg(short, long)]
     form_data: Option<String>,
 
@@ -76,6 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             None
         },
         cookies: args.cookies,
+        dry_run: args.dry_run,
         form_data: args.form_data,
         form: args.form,
         headers: args.headers,
