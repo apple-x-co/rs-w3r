@@ -1,6 +1,6 @@
 mod client;
 
-use crate::client::{execute_request, BasicAuthConfig, Config, ProxyConfig};
+use crate::client::{execute_request, load_config_file, BasicAuthConfig, Config, ProxyConfig};
 use clap::{arg, Parser};
 use std::error::Error;
 
@@ -12,6 +12,9 @@ struct Args {
 
     #[arg(long, env = "BASIC_PASS")]
     basic_pass: Option<String>,
+
+    #[arg(short, long)]
+    config: Option<String>,
 
     #[arg(long, action = clap::ArgAction::Append)]
     cookies: Option<Vec<String>>,
@@ -39,6 +42,9 @@ struct Args {
 
     #[arg(short, long)]
     output: Option<String>,
+
+    #[arg(long)]
+    preset: Option<String>,
 
     #[arg(long, default_value_t = false)]
     pretty_json: bool,
@@ -71,7 +77,7 @@ struct Args {
     timing: bool,
 
     #[arg(short, long)]
-    url: String,
+    url: Option<String>,
 
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
@@ -80,69 +86,108 @@ struct Args {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let config = Config {
-        basic_auth: if let Some(basic_user) = args.basic_user {
-            if let Some(basic_pass) = args.basic_pass {
-                Some(BasicAuthConfig {
-                    user: basic_user,
-                    pass: basic_pass,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        },
-        cookies: args.cookies,
-        dry_run: args.dry_run,
-        form_data: args.form_data,
-        form: args.form,
-        headers: args.headers,
-        json: args.json,
-        json_filter: args.json_filter,
-        method: args.method,
-        output: args.output,
-        pretty_json: args.pretty_json,
-        proxy: if let Some(proxy_host) = args.proxy_host {
-            if let Some(proxy_port) = args.proxy_port {
-                if let Some(proxy_user) = args.proxy_user {
-                    if let Some(proxy_pass) = args.proxy_pass {
-                        Some(ProxyConfig {
-                            host: proxy_host,
-                            port: proxy_port,
-                            user: Some(proxy_user),
-                            pass: Some(proxy_pass),
-                        })
-                    } else {
-                        Some(ProxyConfig {
-                            host: proxy_host,
-                            port: proxy_port,
-                            user: None,
-                            pass: None,
-                        })
-                    }
-                } else {
-                    Some(ProxyConfig {
-                        host: proxy_host,
-                        port: proxy_port,
-                        user: None,
-                        pass: None,
-                    })
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        },
-        retry: args.retry,
-        retry_delay: args.retry_delay,
-        silent: args.silent,
-        timeout: args.timeout,
-        timing: args.timing,
-        url: args.url,
-        verbose: args.verbose,
+    // 設定ファイルの読み込み
+    let mut config = if let Some(config_path) = &args.config {
+        load_config_file(config_path, args.preset.as_deref())?
+    } else {
+        Config::default()
     };
+
+    // コマンドライン引数で設定ファイルの値をオーバーライド
+    if let Some(basic_user) = args.basic_user {
+        if let Some(basic_pass) = args.basic_pass {
+            config.basic_auth = Some(BasicAuthConfig {
+                user: basic_user,
+                pass: basic_pass,
+            });
+        }
+    }
+
+    if let Some(cookies) = args.cookies {
+        config.cookies = Some(cookies);
+    }
+
+    if args.dry_run {
+        config.dry_run = args.dry_run;
+    }
+
+    if let Some(form_data) = args.form_data {
+        config.form_data = Some(form_data);
+    }
+
+    if let Some(form) = args.form {
+        config.form = Some(form);
+    }
+
+    if let Some(headers) = args.headers {
+        config.headers = Some(headers);
+    }
+
+    if let Some(json) = args.json {
+        config.json = Some(json);
+    }
+
+    if let Some(json_filter) = args.json_filter {
+        config.json_filter = Some(json_filter);
+    }
+
+    if args.method != "GET" {
+        config.method = args.method;
+    }
+
+    if let Some(output) = args.output {
+        config.output = Some(output);
+    }
+
+    if args.pretty_json {
+        config.pretty_json = args.pretty_json;
+    }
+
+    // プロキシ設定
+    if let Some(proxy_host) = args.proxy_host {
+        if let Some(proxy_port) = args.proxy_port {
+            let proxy_config = ProxyConfig {
+                host: proxy_host,
+                port: proxy_port,
+                user: args.proxy_user,
+                pass: args.proxy_pass,
+            };
+            config.proxy = Some(proxy_config);
+        }
+    }
+
+    if args.retry > 0 {
+        config.retry = args.retry;
+    }
+
+    if args.retry_delay != 1.0 {
+        config.retry_delay = args.retry_delay;
+    }
+
+    if args.silent {
+        config.silent = args.silent;
+    }
+
+    if args.timeout != 30 {
+        config.timeout = args.timeout;
+    }
+
+    if args.timing {
+        config.timing = args.timing;
+    }
+
+    if let Some(url) = args.url {
+        config.url = url;
+    }
+
+    if args.verbose {
+        config.verbose = args.verbose;
+    }
+
+    // URLが設定されていない場合はエラー
+    if config.url.is_empty() {
+        return Err("URL is required. Use -u/--url option or specify in config file.".into());
+    }
 
     execute_request(config)?;
 

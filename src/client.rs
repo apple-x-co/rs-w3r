@@ -2,19 +2,23 @@ use reqwest::blocking::Client;
 use reqwest::cookie::Jar;
 use reqwest::header::{HeaderName, CONTENT_TYPE};
 use reqwest::{Method, Url};
-use serde_json::{Value, from_str};
+use serde::{Deserialize, Serialize};
+use serde_json::{from_str, Value};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicAuthConfig {
     pub user: String,
     pub pass: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
     pub host: String,
     pub port: String,
@@ -22,6 +26,7 @@ pub struct ProxyConfig {
     pub pass: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub basic_auth: Option<BasicAuthConfig>,
     pub cookies: Option<Vec<String>>,
@@ -44,6 +49,60 @@ pub struct Config {
     pub verbose: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct ConfigFile {
+    preset: HashMap<String, ConfigPreset>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ConfigPreset {
+    url: Option<String>,
+    method: Option<String>,
+    headers: Option<Vec<String>>,
+    timeout: Option<u64>,
+    pretty_json: Option<bool>,
+    timing: Option<bool>,
+    verbose: Option<bool>,
+    silent: Option<bool>,
+    retry: Option<u32>,
+    retry_delay: Option<f64>,
+    json: Option<String>,
+    json_filter: Option<String>,
+    form_data: Option<String>,
+    form: Option<Vec<String>>,
+    cookies: Option<Vec<String>>,
+    output: Option<String>,
+    dry_run: Option<bool>,
+    basic_auth: Option<BasicAuthConfig>,
+    proxy: Option<ProxyConfig>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            basic_auth: None,
+            cookies: None,
+            dry_run: false,
+            form_data: None,
+            form: None,
+            headers: None,
+            json: None,
+            json_filter: None,
+            method: "GET".to_string(),
+            output: None,
+            pretty_json: false,
+            proxy: None,
+            retry: 0,
+            retry_delay: 1.0,
+            silent: false,
+            timeout: 30,
+            timing: false,
+            url: String::new(),
+            verbose: false,
+        }
+    }
+}
+
 struct ResponseInfo {
     status: reqwest::StatusCode,
     version: reqwest::Version,
@@ -63,6 +122,45 @@ impl ResponseInfo {
 }
 
 const USER_AGENT: &str = "rs-w3r/1.0";
+
+pub fn load_config_file(config_path: &str, preset_name: Option<&str>) -> Result<Config, Box<dyn Error>> {
+    let mut file = File::open(config_path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    let config_file: ConfigFile = toml::from_str(&contents)?;
+
+    let preset = if let Some(name) = preset_name {
+        config_file.preset.get(name)
+            .ok_or_else(|| format!("Preset '{}' not found in config file", name))?
+    } else {
+        // プリセット名が指定されていない場合、最初のプリセットを使用
+        config_file.preset.values().next()
+            .ok_or("No presets found in config file")?
+    };
+
+    Ok(Config {
+        basic_auth: preset.basic_auth.clone(),
+        cookies: preset.cookies.clone(),
+        dry_run: preset.dry_run.unwrap_or(false),
+        form_data: preset.form_data.clone(),
+        form: preset.form.clone(),
+        headers: preset.headers.clone(),
+        json: preset.json.clone(),
+        json_filter: preset.json_filter.clone(),
+        method: preset.method.clone().unwrap_or("GET".to_string()),
+        output: preset.output.clone(),
+        pretty_json: preset.pretty_json.unwrap_or(false),
+        proxy: preset.proxy.clone(),
+        retry: preset.retry.unwrap_or(0),
+        retry_delay: preset.retry_delay.unwrap_or(1.0),
+        silent: preset.silent.unwrap_or(false),
+        timeout: preset.timeout.unwrap_or(30),
+        timing: preset.timing.unwrap_or(false),
+        url: preset.url.clone().unwrap_or_default(),
+        verbose: preset.verbose.unwrap_or(false),
+    })
+}
 
 pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // デフォルトヘッダーの追跡用

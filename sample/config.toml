@@ -1,0 +1,5 @@
+[preset.httpbin-get]
+url = "https://httpbin.org/get"
+verbose = true
+timing = true
+pretty_json = true
