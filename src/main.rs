@@ -31,11 +31,17 @@ struct Args {
     #[arg(short, long)]
     json: Option<String>,
 
+    #[arg(long)]
+    json_filter: Option<String>,
+
     #[arg(short, long, default_value = "GET")]
     method: String,
 
     #[arg(short, long)]
     output: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    pretty_json: bool,
 
     #[arg(long, env = "PROXY_HOST")]
     proxy_host: Option<String>,
@@ -87,8 +93,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         form: args.form,
         headers: args.headers,
         json: args.json,
+        json_filter: args.json_filter,
         method: args.method,
         output: args.output,
+        pretty_json: args.pretty_json,
         proxy: if let Some(proxy_host) = args.proxy_host {
             if let Some(proxy_port) = args.proxy_port {
                 if let Some(proxy_user) = args.proxy_user {

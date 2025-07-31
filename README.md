@@ -13,6 +13,7 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 - **認証方式**: Basic認証
 - **プロキシ**: HTTP プロキシ（認証付き対応）
 - **出力形式**: プレーンテキスト、ファイル出力
+- **JSON処理**: 自動美化表示、jq風パスフィルタリング
 
 ## ✨ 主な特徴
 
@@ -22,9 +23,10 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 📋 **カスタムヘッダー** - 柔軟なHTTPヘッダー設定  
 🌍 **プロキシ対応** - HTTP プロキシサーバー経由でのリクエスト  
 📊 **詳細出力** - レスポンスのステータス、ヘッダー、実行時間の表示  
-⏱️ **パフォーマンス測定** - レスポンス時間、転送速度、サイズの詳細分析
+⏱️ **パフォーマンス測定** - レスポンス時間、転送速度、サイズの詳細分析  
+🎨 **JSON美化・フィルタ** - 自動的なJSON整形表示とjq風パスフィルタリング  
 🔇 **サイレントモード** - スクリプト用の静寂実行  
-⏱️ **タイムアウト設定** - カスタマイズ可能なリクエストタイムアウト  
+⏰ **タイムアウト設定** - カスタマイズ可能なリクエストタイムアウト  
 🔧 **環境変数対応** - 設定の環境変数による管理  
 📁 **ファイル出力** - レスポンスの直接ファイル保存  
 🧪 **ドライラン** - 実際にリクエストを送信せずにリクエスト内容を確認
@@ -34,6 +36,7 @@ rs-w3rは、開発者やシステム管理者向けに設計されたパワフ�
 - **言語**: Rust 2021 Edition
 - **HTTPクライアント**: reqwest (0.12) - JSON、クッキー、ブロッキング、rustls-tls、HTTP/2対応
 - **CLI**: clap (4.5) - derive、環境変数機能付き
+- **JSON処理**: serde_json (1.0) - 美化表示、パスフィルタリング
 - **最適化**: LTO、コード生成最適化、シンボル削除による小さなバイナリサイズ
 - **クロスコンパイル**: cross対応（Linux musl target）
 
@@ -95,13 +98,49 @@ rs-w3r -u https://httpbin.org/get --timing
 rs-w3r -u https://api.github.com/users/octocat --timing -v
 ```
 
-```text
+**出力例:**
+
+```
 --- Timing Information ---
 Response received: 187ms
 Body read time: 12ms
 Total time: 199ms
 Response size: 1843 bytes (1.80 KB)
 Throughput: 9.05 KB/s
+```
+
+### JSON美化・フィルタリング
+
+```bash
+# JSONの美化表示
+rs-w3r -u https://api.github.com/users/apple-x-co --pretty-json
+
+# 特定フィールドの抽出
+rs-w3r -u https://api.github.com/users/apple-x-co --json-filter ".name"
+
+# 配列の最初の要素
+rs-w3r -u https://api.github.com/repos/apple-x-co/rocket/releases/latest --json-filter ".assets[0].browser_download_url"
+
+# 美化とフィルタの組み合わせ
+rs-w3r -u https://api.github.com/users/apple-x-co --pretty-json --json-filter ".public_repos"
+```
+
+**出力例:**
+
+```bash
+# 通常の出力
+{"login":"apple-x-co","id":1,"name":"DUMMY","public_repos":8}
+
+# --pretty-json適用後
+{
+  "login": "apple-x-co",
+  "id": 1,
+  "name": "DUMMY",
+  "public_repos": 8
+}
+
+# --json-filter ".name"適用後
+"DUMMY"
 ```
 
 ### リクエスト内容の確認（ドライラン）
@@ -133,6 +172,8 @@ rs-w3r -u https://www.example.com/secure-data
 - `-s, --silent` - 出力を抑制
 - `--dry-run` - 実際にリクエストを送信せず、リクエスト内容のみ表示
 - `--timing` - パフォーマンス測定情報を表示（レスポンス時間、転送速度など）
+- `--pretty-json` - JSONレスポンスの美化表示（整形されたインデント付き）
+- `--json-filter <PATH>` - jq風JSONパスフィルタリング（例：`.name`, `.[0].title`, `.data.items[0]`）
 
 #### データ送信
 

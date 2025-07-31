@@ -979,6 +979,7 @@ version = "0.1.2"
 dependencies = [
  "clap",
  "reqwest",
+ "serde_json",
 ]
 
 [[package]]

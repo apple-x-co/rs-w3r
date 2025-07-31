@@ -2,6 +2,7 @@ use reqwest::blocking::Client;
 use reqwest::cookie::Jar;
 use reqwest::header::{HeaderName, CONTENT_TYPE};
 use reqwest::{Method, Url};
+use serde_json::{Value, from_str};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
@@ -28,8 +29,10 @@ pub struct Config {
     pub form: Option<Vec<String>>,
     pub headers: Option<Vec<String>>,
     pub json: Option<String>,
+    pub json_filter: Option<String>,
     pub method: String,
     pub output: Option<String>,
+    pub pretty_json: bool,
     pub proxy: Option<ProxyConfig>,
     pub silent: bool,
     pub timeout: u64,
@@ -52,12 +55,12 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // デフォルトヘッダー追跡
     default_headers.insert(reqwest::header::USER_AGENT, USER_AGENT.parse().unwrap());
 
-    if let Some(proxy) = config.proxy {
+    if let Some(ref proxy) = config.proxy {
         let proxy_url = format!("https://{}:{}", proxy.host, proxy.port);
         let mut http_proxy = reqwest::Proxy::http(proxy_url)?;
 
-        if let Some(proxy_user) = proxy.user {
-            if let Some(proxy_pass) = proxy.pass {
+        if let Some(proxy_user) = &proxy.user {
+            if let Some(proxy_pass) = &proxy.pass {
                 http_proxy = http_proxy.basic_auth(proxy_user.as_str(), proxy_pass.as_str());
             }
         }
@@ -65,7 +68,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         client_builder = client_builder.proxy(http_proxy);
     }
 
-    if let Some(cookies) = config.cookies {
+    if let Some(ref cookies) = config.cookies {
         let cookie_jar = Jar::default();
         let url = &Url::parse(config.url.as_str()).unwrap();
 
@@ -76,7 +79,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         client_builder = client_builder.cookie_provider(Arc::new(cookie_jar));
     }
 
-    if let Some(headers) = config.headers {
+    if let Some(ref headers) = config.headers {
         if !headers.is_empty() {
             let mut header_map = reqwest::header::HeaderMap::new();
 
@@ -112,8 +115,8 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         _ => panic!("unknown method"),
     };
 
-    if let Some(basic_auth) = config.basic_auth {
-        request_builder = request_builder.basic_auth(basic_auth.user, Some(basic_auth.pass));
+    if let Some(ref basic_auth) = config.basic_auth {
+        request_builder = request_builder.basic_auth(&basic_auth.user, Some(&basic_auth.pass));
 
         // デフォルトヘッダー追跡
         default_headers.insert(
@@ -122,10 +125,10 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         );
     }
 
-    if let Some(form_data) = config.form_data {
+    if let Some(ref form_data) = config.form_data {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(form_data);
+            .body(form_data.to_string());
 
         // デフォルトヘッダー追跡
         default_headers.insert(
@@ -134,7 +137,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         );
     }
 
-    if let Some(form) = config.form {
+    if let Some(ref form) = config.form {
         let params: Vec<_> = form
             .into_iter()
             .filter_map(|arg| {
@@ -157,7 +160,7 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         );
     }
 
-    if let Some(json) = config.json {
+    if let Some(ref json) = config.json {
         request_builder = request_builder
             .header(CONTENT_TYPE, "application/json; charset=utf-8")
             .json(&json);
@@ -250,16 +253,91 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         println!();
     }
 
+    // ボディの処理とJSON加工
+    let processed_body = process_json_response(&body, &config)?;
+
     // ボディの表示・保存
     if let Some(output) = config.output {
-        write_file_bytes(output.as_str(), body.as_ref())?;
+        write_file_bytes(output.as_str(), processed_body.as_ref())?;
     } else {
         if !config.silent {
-            println!("{}", body);
+            println!("{}", processed_body);
         }
     }
 
     Ok(())
+}
+
+fn process_json_response(body: &str, config: &Config) -> Result<String, Box<dyn Error>> {
+    // JSONかどうかチェック
+    let is_json = if let Ok(json_value) = from_str::<Value>(body) {
+        let mut result = json_value;
+
+        // JSONフィルタ適用
+        if let Some(filter_path) = &config.json_filter {
+            result = apply_json_filter(result, filter_path)?;
+        }
+
+        // 美化表示
+        if config.pretty_json {
+            serde_json::to_string_pretty(&result)?
+        } else {
+            serde_json::to_string(&result)?
+        }
+    } else {
+        // JSONではない場合はそのまま返す
+        body.to_string()
+    };
+
+    Ok(is_json)
+}
+
+fn apply_json_filter(mut json: Value, path: &str) -> Result<Value, Box<dyn Error>> {
+    let path = path.trim();
+
+    // ルートを表す "." の場合はそのまま返す
+    if path == "." {
+        return Ok(json);
+    }
+
+    // "." で始まるパスから最初の "." を削除
+    let path = if path.starts_with('.') {
+        &path[1..]
+    } else {
+        path
+    };
+
+    let parts: Vec<&str> = path.split('.').collect();
+
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+
+        // 配列インデックスのチェック（例：items[0]）
+        if let Some(bracket_pos) = part.find('[') {
+            let field_name = &part[..bracket_pos];
+            let index_part = &part[bracket_pos+1..];
+
+            if let Some(close_bracket) = index_part.find(']') {
+                let index_str = &index_part[..close_bracket];
+                if let Ok(index) = index_str.parse::<usize>() {
+                    // オブジェクトのフィールドにアクセス
+                    if !field_name.is_empty() {
+                        json = json.get(field_name).cloned().unwrap_or(Value::Null);
+                    }
+                    // 配列のインデックスにアクセス
+                    json = json.get(index).cloned().unwrap_or(Value::Null);
+                    continue;
+                }
+            }
+        }
+
+        // 通常のフィールドアクセス
+        json = json.get(part).cloned().unwrap_or(Value::Null);
+    }
+
+    Ok(json)
 }
 
 fn write_file_bytes(file_path: &str, data: &[u8]) -> Result<(), Box<dyn Error>> {
