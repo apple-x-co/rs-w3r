@@ -55,6 +55,12 @@ struct Args {
     #[arg(long, env = "PROXY_PASS")]
     proxy_pass: Option<String>,
 
+    #[arg(long, default_value = "0")]
+    retry: u32,
+
+    #[arg(long, default_value = "1.0")]
+    retry_delay: f64,
+
     #[arg(short, long, default_value_t = false)]
     silent: bool,
 
@@ -129,6 +135,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             None
         },
+        retry: args.retry,
+        retry_delay: args.retry_delay,
         silent: args.silent,
         timeout: args.timeout,
         timing: args.timing,

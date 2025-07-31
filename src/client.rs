@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct BasicAuthConfig {
@@ -34,11 +35,31 @@ pub struct Config {
     pub output: Option<String>,
     pub pretty_json: bool,
     pub proxy: Option<ProxyConfig>,
+    pub retry: u32,
+    pub retry_delay: f64,
     pub silent: bool,
     pub timeout: u64,
     pub timing: bool,
     pub url: String,
     pub verbose: bool,
+}
+
+struct ResponseInfo {
+    status: reqwest::StatusCode,
+    version: reqwest::Version,
+    headers: reqwest::header::HeaderMap,
+}
+
+struct TimingInfo {
+    response_time: Duration,
+    body_read_time: Duration,
+    total_time: Duration,
+}
+
+impl ResponseInfo {
+    fn status(&self) -> reqwest::StatusCode { self.status }
+    fn version(&self) -> reqwest::Version { self.version }
+    fn headers(&self) -> &reqwest::header::HeaderMap { &self.headers }
 }
 
 const USER_AGENT: &str = "rs-w3r/1.0";
@@ -199,36 +220,22 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    // タイミング測定開始
-    let start_time = Instant::now();
-
-    // リクエストを実行しレスポンスを取得
-    let response = client.execute(request)?;
-
-    // レスポンス受信完了時間を記録
-    let response_time = start_time.elapsed();
+    // リトライ処理を含むリクエスト実行
+    let (response_info, body, timing_info) = execute_with_retry(&client, request, &config)?;
 
     // レスポンス情報の表示
     if config.verbose {
         println!(
             "< {:?} {} {}",
-            response.version(),
-            response.status().as_u16(),
-            response.status().canonical_reason().unwrap_or("")
+            response_info.version(),
+            response_info.status().as_u16(),
+            response_info.status().canonical_reason().unwrap_or("")
         );
-        for (name, value) in response.headers() {
+        for (name, value) in response_info.headers() {
             println!("< {}: {}", name, value.to_str().unwrap_or("<binary>"));
         }
         println!();
     }
-
-    // ボディ読み取り開始時間を記録
-    let body_start_time = Instant::now();
-    let body = response.text()?;
-    let body_read_time = body_start_time.elapsed();
-
-    // 総実行時間
-    let total_time = start_time.elapsed();
 
     // レスポンスサイズ
     let response_size = body.len();
@@ -236,9 +243,9 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     // タイミング情報の表示
     if config.timing {
         println!("--- Timing Information ---");
-        println!("Response received: {:?}", response_time);
-        println!("Body read time: {:?}", body_read_time);
-        println!("Total time: {:?}", total_time);
+        println!("Response received: {:?}", timing_info.response_time);
+        println!("Body read time: {:?}", timing_info.body_read_time);
+        println!("Total time: {:?}", timing_info.total_time);
         println!(
             "Response size: {} bytes ({:.2} KB)",
             response_size,
@@ -246,8 +253,8 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         );
 
         // スループット計算
-        if response_size > 0 && total_time.as_secs_f64() > 0.0 {
-            let throughput = response_size as f64 / total_time.as_secs_f64() / 1024.0;
+        if response_size > 0 && timing_info.total_time.as_secs_f64() > 0.0 {
+            let throughput = response_size as f64 / timing_info.total_time.as_secs_f64() / 1024.0;
             println!("Throughput: {:.2} KB/s", throughput);
         }
         println!();
@@ -266,6 +273,109 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn execute_with_retry(
+    client: &Client,
+    request: reqwest::blocking::Request,
+    config: &Config,
+) -> Result<(ResponseInfo, String, TimingInfo), Box<dyn Error>> {
+    let mut attempt = 0;
+    let max_attempts = config.retry + 1; // 初回実行 + リトライ回数
+    let overall_start = Instant::now();
+
+    loop {
+        attempt += 1;
+
+        // リクエストをクローン（再試行のため）
+        let cloned_request = request.try_clone()
+            .ok_or("Failed to clone request for retry")?;
+
+        if config.verbose && attempt > 1 {
+            println!("--- Retry Attempt {} ---", attempt - 1);
+        }
+
+        // 個別リクエストのタイミング測定開始
+        let request_start = Instant::now();
+
+        // リクエスト実行
+        match client.execute(cloned_request) {
+            Ok(response) => {
+                let status = response.status();
+
+                // リトライが必要かどうかをチェック
+                let should_retry = should_retry_for_status(status.as_u16()) && attempt < max_attempts;
+
+                if should_retry {
+                    if config.verbose {
+                        println!("HTTP {} - retrying after delay...", status.as_u16());
+                    }
+
+                    // 指数バックオフ遅延
+                    let delay_secs = config.retry_delay * (2_f64.powi((attempt - 1) as i32));
+                    thread::sleep(Duration::from_secs_f64(delay_secs));
+                    continue;
+                } else {
+                    // 成功または最大試行回数に到達
+                    let response_received_time = request_start.elapsed();
+
+                    // responseの情報を保存してからbodyを読み取り
+                    let status_code = response.status();
+                    let version = response.version();
+                    let headers = response.headers().clone();
+
+                    // ボディ読み取り時間測定
+                    let body_start = Instant::now();
+                    let body = response.text()?;
+                    let body_read_time = body_start.elapsed();
+
+                    let total_time = overall_start.elapsed();
+
+                    // レスポンス情報を作成
+                    let response_info = ResponseInfo {
+                        status: status_code,
+                        version,
+                        headers,
+                    };
+
+                    let timing_info = TimingInfo {
+                        response_time: response_received_time,
+                        body_read_time,
+                        total_time,
+                    };
+
+                    return Ok((response_info, body, timing_info));
+                }
+            },
+            Err(e) => {
+                if attempt < max_attempts {
+                    if config.verbose {
+                        println!("Request error: {} - retrying after delay...", e);
+                    }
+
+                    // 指数バックオフ遅延
+                    let delay_secs = config.retry_delay * (2_f64.powi((attempt - 1) as i32));
+                    thread::sleep(Duration::from_secs_f64(delay_secs));
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+}
+
+fn should_retry_for_status(status_code: u16) -> bool {
+    match status_code {
+        // サーバーエラー (5xx) はリトライ
+        500..=599 => true,
+        // Too Many Requests はリトライ
+        429 => true,
+        // Request Timeout はリトライ
+        408 => true,
+        // それ以外はリトライしない
+        _ => false,
+    }
 }
 
 fn process_json_response(body: &str, config: &Config) -> Result<String, Box<dyn Error>> {
