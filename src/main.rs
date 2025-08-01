@@ -99,6 +99,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // コマンドライン引数で設定ファイルの値をオーバーライド
+    apply_config(&mut config, args);
+
+    // URLが設定されていない場合はエラー
+    if config.url.is_empty() {
+        return Err(ERROR_MISSING_URL.into());
+    }
+
+    // HTTP リクエスト
+    execute_request(config)?;
+
+    Ok(())
+}
+
+fn apply_config(config: &mut Config, args: Args) {
     if let Some(basic_user) = args.basic_user {
         if let Some(basic_pass) = args.basic_pass {
             config.basic_auth = Some(BasicAuthConfig {
@@ -161,11 +175,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if args.retry > 0 {
+    if args.retry != DEFAULT_RETRY_COUNT {
         config.retry = args.retry;
     }
 
-    if args.retry_delay != 1.0 {
+    if args.retry_delay != DEFAULT_RETRY_DELAY {
         config.retry_delay = args.retry_delay;
     }
 
@@ -173,7 +187,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         config.silent = args.silent;
     }
 
-    if args.timeout != 30 {
+    if args.timeout != DEFAULT_TIMEOUT_SECS {
         config.timeout = args.timeout;
     }
 
@@ -188,13 +202,4 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.verbose {
         config.verbose = args.verbose;
     }
-
-    // URLが設定されていない場合はエラー
-    if config.url.is_empty() {
-        return Err(ERROR_MISSING_URL.into());
-    }
-
-    execute_request(config)?;
-
-    Ok(())
 }
