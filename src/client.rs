@@ -12,6 +12,40 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+// アプリケーション情報
+const USER_AGENT: &str = "rs-w3r/1.0";
+
+// デフォルト値
+pub(crate) const DEFAULT_RETRY_COUNT: u32 = 0;
+pub(crate) const DEFAULT_RETRY_DELAY: f64 = 1.0;
+pub(crate) const DEFAULT_TIMEOUT_SECS: u64 = 30;
+pub(crate) const DEFAULT_METHOD: &str = "GET";
+
+// リトライ関連
+const RETRY_BACKOFF_MULTIPLIER: f64 = 2.0;
+
+// ファイルサイズ計算
+const BYTES_PER_KB: f64 = 1024.0;
+
+// HTTPステータスコード
+const SERVER_ERROR_START: u16 = 500;
+const SERVER_ERROR_END: u16 = 599;
+const TOO_MANY_REQUESTS: u16 = 429;
+const REQUEST_TIMEOUT: u16 = 408;
+
+// Content-Type
+const CONTENT_TYPE_FORM: &str = "application/x-www-form-urlencoded";
+const CONTENT_TYPE_JSON: &str = "application/json; charset=utf-8";
+
+// 認証プレースホルダー
+const BASIC_AUTH_PLACEHOLDER: &str = "Basic <credentials>";
+
+// エラーメッセージ
+const ERROR_REQUEST_CLONE: &str = "Failed to clone request for retry";
+
+// JSONフィルタ関連
+const JSON_PATH_ROOT: &str = ".";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicAuthConfig {
     pub user: String,
@@ -88,14 +122,14 @@ impl Default for Config {
             headers: None,
             json: None,
             json_filter: None,
-            method: "GET".to_string(),
+            method: DEFAULT_METHOD.to_string(),
             output: None,
             pretty_json: false,
             proxy: None,
-            retry: 0,
-            retry_delay: 1.0,
+            retry: DEFAULT_RETRY_COUNT,
+            retry_delay: DEFAULT_RETRY_DELAY,
             silent: false,
-            timeout: 30,
+            timeout: DEFAULT_TIMEOUT_SECS,
             timing: false,
             url: String::new(),
             verbose: false,
@@ -120,8 +154,6 @@ impl ResponseInfo {
     fn version(&self) -> reqwest::Version { self.version }
     fn headers(&self) -> &reqwest::header::HeaderMap { &self.headers }
 }
-
-const USER_AGENT: &str = "rs-w3r/1.0";
 
 pub fn load_config_file(config_path: &str, preset_name: Option<&str>) -> Result<Config, Box<dyn Error>> {
     let mut file = File::open(config_path)?;
@@ -148,14 +180,14 @@ pub fn load_config_file(config_path: &str, preset_name: Option<&str>) -> Result<
         headers: preset.headers.clone(),
         json: preset.json.clone(),
         json_filter: preset.json_filter.clone(),
-        method: preset.method.clone().unwrap_or("GET".to_string()),
+        method: preset.method.clone().unwrap_or(DEFAULT_METHOD.to_string()),
         output: preset.output.clone(),
         pretty_json: preset.pretty_json.unwrap_or(false),
         proxy: preset.proxy.clone(),
-        retry: preset.retry.unwrap_or(0),
-        retry_delay: preset.retry_delay.unwrap_or(1.0),
+        retry: preset.retry.unwrap_or(DEFAULT_RETRY_COUNT),
+        retry_delay: preset.retry_delay.unwrap_or(DEFAULT_RETRY_DELAY),
         silent: preset.silent.unwrap_or(false),
-        timeout: preset.timeout.unwrap_or(30),
+        timeout: preset.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS),
         timing: preset.timing.unwrap_or(false),
         url: preset.url.clone().unwrap_or_default(),
         verbose: preset.verbose.unwrap_or(false),
@@ -240,19 +272,19 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         // デフォルトヘッダー追跡
         default_headers.insert(
             reqwest::header::AUTHORIZATION,
-            "Basic <credentials>".to_string().parse().unwrap(),
+            BASIC_AUTH_PLACEHOLDER.to_string().parse().unwrap(),
         );
     }
 
     if let Some(ref form_data) = config.form_data {
         request_builder = request_builder
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(CONTENT_TYPE, CONTENT_TYPE_FORM)
             .body(form_data.to_string());
 
         // デフォルトヘッダー追跡
         default_headers.insert(
             CONTENT_TYPE,
-            "application/x-www-form-urlencoded".parse().unwrap(),
+            CONTENT_TYPE_FORM.parse().unwrap(),
         );
     }
 
@@ -269,25 +301,25 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
             .collect();
 
         request_builder = request_builder
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(CONTENT_TYPE, CONTENT_TYPE_FORM)
             .form(&params);
 
         // デフォルトヘッダー追跡
         default_headers.insert(
             CONTENT_TYPE,
-            "application/x-www-form-urlencoded".parse().unwrap(),
+            CONTENT_TYPE_FORM.parse().unwrap(),
         );
     }
 
     if let Some(ref json) = config.json {
         request_builder = request_builder
-            .header(CONTENT_TYPE, "application/json; charset=utf-8")
+            .header(CONTENT_TYPE, CONTENT_TYPE_JSON)
             .json(&json);
 
         // デフォルトヘッダー追跡
         default_headers.insert(
             CONTENT_TYPE,
-            "application/json; charset=utf-8".parse().unwrap(),
+            CONTENT_TYPE_JSON.parse().unwrap(),
         );
     }
 
@@ -347,12 +379,12 @@ pub fn execute_request(config: Config) -> Result<(), Box<dyn Error>> {
         println!(
             "Response size: {} bytes ({:.2} KB)",
             response_size,
-            response_size as f64 / 1024.0
+            response_size as f64 / BYTES_PER_KB
         );
 
         // スループット計算
         if response_size > 0 && timing_info.total_time.as_secs_f64() > 0.0 {
-            let throughput = response_size as f64 / timing_info.total_time.as_secs_f64() / 1024.0;
+            let throughput = response_size as f64 / timing_info.total_time.as_secs_f64() / BYTES_PER_KB;
             println!("Throughput: {:.2} KB/s", throughput);
         }
         println!();
@@ -387,7 +419,7 @@ fn execute_with_retry(
 
         // リクエストをクローン（再試行のため）
         let cloned_request = request.try_clone()
-            .ok_or("Failed to clone request for retry")?;
+            .ok_or(ERROR_REQUEST_CLONE)?;
 
         if config.verbose && attempt > 1 {
             println!("--- Retry Attempt {} ---", attempt - 1);
@@ -452,7 +484,7 @@ fn execute_with_retry(
                     }
 
                     // 指数バックオフ遅延
-                    let delay_secs = config.retry_delay * (2_f64.powi((attempt - 1) as i32));
+                    let delay_secs = config.retry_delay * (RETRY_BACKOFF_MULTIPLIER.powi((attempt - 1) as i32));
                     thread::sleep(Duration::from_secs_f64(delay_secs));
                     continue;
                 } else {
@@ -466,11 +498,11 @@ fn execute_with_retry(
 fn should_retry_for_status(status_code: u16) -> bool {
     match status_code {
         // サーバーエラー (5xx) はリトライ
-        500..=599 => true,
+        SERVER_ERROR_START..=SERVER_ERROR_END => true,
         // Too Many Requests はリトライ
-        429 => true,
+        TOO_MANY_REQUESTS => true,
         // Request Timeout はリトライ
-        408 => true,
+        REQUEST_TIMEOUT => true,
         // それ以外はリトライしない
         _ => false,
     }
@@ -504,7 +536,7 @@ fn apply_json_filter(mut json: Value, path: &str) -> Result<Value, Box<dyn Error
     let path = path.trim();
 
     // ルートを表す "." の場合はそのまま返す
-    if path == "." {
+    if path == JSON_PATH_ROOT {
         return Ok(json);
     }
 

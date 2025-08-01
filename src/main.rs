@@ -4,6 +4,11 @@ use crate::client::{execute_request, load_config_file, BasicAuthConfig, Config, 
 use clap::{arg, Parser};
 use std::error::Error;
 
+use crate::client::{DEFAULT_METHOD, DEFAULT_TIMEOUT_SECS, DEFAULT_RETRY_COUNT, DEFAULT_RETRY_DELAY};
+
+// エラーメッセージ定数
+const ERROR_MISSING_URL: &str = "URL is required. Use -u/--url option or specify in config file.";
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -37,7 +42,7 @@ struct Args {
     #[arg(long)]
     json_filter: Option<String>,
 
-    #[arg(short, long, default_value = "GET")]
+    #[arg(short, long, default_value = DEFAULT_METHOD)]
     method: String,
 
     #[arg(short, long)]
@@ -61,16 +66,16 @@ struct Args {
     #[arg(long, env = "PROXY_PASS")]
     proxy_pass: Option<String>,
 
-    #[arg(long, default_value = "0")]
+    #[arg(long, default_value_t = DEFAULT_RETRY_COUNT)]
     retry: u32,
 
-    #[arg(long, default_value = "1.0")]
+    #[arg(long, default_value_t = DEFAULT_RETRY_DELAY)]
     retry_delay: f64,
 
     #[arg(short, long, default_value_t = false)]
     silent: bool,
 
-    #[arg(short, long, default_value = "30")]
+    #[arg(short, long, default_value_t = DEFAULT_TIMEOUT_SECS)]
     timeout: u64,
 
     #[arg(long, default_value_t = false)]
@@ -131,7 +136,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         config.json_filter = Some(json_filter);
     }
 
-    if args.method != "GET" {
+    if args.method != DEFAULT_METHOD {
         config.method = args.method;
     }
 
@@ -186,7 +191,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // URLが設定されていない場合はエラー
     if config.url.is_empty() {
-        return Err("URL is required. Use -u/--url option or specify in config file.".into());
+        return Err(ERROR_MISSING_URL.into());
     }
 
     execute_request(config)?;
